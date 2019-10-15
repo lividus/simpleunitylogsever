@@ -43,9 +43,21 @@ class RequestHandler(BaseHTTPRequestHandler):
             fig.set_canvas(new_manager.canvas)
 
             #subplots = fig.subplots(1, len(self.data_frames))
-            ax = fig.subplots()
-            ax.plot(self.data_frames['fps']['x'], self.data_frames['fps']['y'])
-            ax.set_title('fps')
+            #fig, axs = fig.subplots(len(self.data_frames.keys()))
+            dfl = len(self.data_frames.keys())
+            if dfl == 0:
+                ax = fig.subplots()
+                ax.plot([0], [0])
+            elif dfl == 1:
+                dfk = list(self.data_frames.keys())[0]
+                axs = fig.subplots()
+                axs.plot(self.data_frames[dfk]['x'], self.data_frames[dfk]['y'])
+                axs.set_title(dfk)
+            else:
+                f, axs = fig.subplots(dfl)
+                for i, df in enumerate(self.data_frames.keys()):
+                    axs[i].plot(self.data_frames[df]['x'], self.data_frames[df]['y'])
+                    axs[i].set_title(df)
             # for i, df in enumerate(self.data_frames):
             #     #ax = fig.add_subplot(len(self.data_frames), 1, i)
             #     ax = fig.add_subplot()
@@ -93,10 +105,16 @@ class RequestHandler(BaseHTTPRequestHandler):
             ftime = obj['time']
             fvalue = obj['value']
             if dataname in self.data_frames:
-                self.data_frames[dataname]['x'].append(ftime)
-                self.data_frames[dataname]['y'].append(fvalue)
+                x1 = self.data_frames[dataname]['x'][-1]
+                x2 = ftime[0]
+                if x1 < x2:
+                    self.data_frames[dataname]['x'].extend(ftime)
+                    self.data_frames[dataname]['y'].extend(fvalue)
+                else:
+                    self.data_frames[dataname]['x'] = ftime
+                    self.data_frames[dataname]['y'] = fvalue
             else:
-                self.data_frames[dataname] = {'x': [ftime], 'y': [fvalue]}
+                self.data_frames[dataname] = {'x': ftime, 'y': fvalue}
 
 
 def setup_logging():
