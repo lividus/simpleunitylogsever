@@ -15,6 +15,75 @@ LOG_FILE_NAME = 'server_logs.txt'
 class RequestHandler(BaseHTTPRequestHandler):
     data_frames = {}
 
+    def get_empty_proc(self):
+        self._set_response()
+        self.wfile.write(
+            f"<html>\n<center><h1><a href='http://10.13.1.4:9999/logs'>Logs</a>   <a href='http://10.13.1.4:9999/graph'>Graph</a></h1></center></html>".encode(
+                "ascii"))
+
+    def get_logs_proc(self):
+        print(f"GET request logs from {self.client_address}")
+        self._set_response()
+        with open(LOG_FILE_NAME, 'r') as log_file:
+            output = io.BytesIO()
+            for line in log_file.readlines():
+                output.write(bytes(line + "<br>", 'utf-8'))
+            output.seek(0)
+            self.wfile.write(output.read())
+
+    def get_graph_proc(self):
+        print(f"GET request graph from {self.client_address}")
+
+        fig = Figure(figsize=(16, 8), dpi=80, facecolor='w', edgecolor='k')
+        dummy = plt.figure()
+        new_manager = dummy.canvas.manager
+        new_manager.canvas.figure = fig
+        fig.set_canvas(new_manager.canvas)
+
+        # subplots = fig.subplots(1, len(self.data_frames))
+        # fig, axs = fig.subplots(len(self.data_frames.keys()))
+        dfl = len(self.data_frames.keys())
+        if dfl == 0:
+            ax = fig.subplots()
+            ax.plot([0], [0])
+        elif dfl == 1:
+            dfk = list(self.data_frames.keys())[0]
+            axs = fig.subplots()
+            axs.plot(self.data_frames[dfk]['x'], self.data_frames[dfk]['y'])
+            axs.set_title(dfk)
+        else:
+            f, axs = fig.subplots(dfl)
+            for i, df in enumerate(self.data_frames.keys()):
+                axs[i].plot(self.data_frames[df]['x'], self.data_frames[df]['y'])
+                axs[i].set_title(df)
+        # for i, df in enumerate(self.data_frames):
+        #     #ax = fig.add_subplot(len(self.data_frames), 1, i)
+        #     ax = fig.add_subplot()
+        #     ax.plot(self.data_frames[df]['x'], self.data_frames[df]['y'])
+        #     ax.set_title(df)
+
+        plt.close(fig)
+
+        # Save it to a temporary buffer.
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png")
+        # with open("result.png", 'wb') as output:
+        #     fig.savefig(output, format="png")
+        # Embed the result in the html output.
+        data = base64.b64encode(buf.getbuffer()).decode("ascii")
+
+        self._set_response()
+        self.wfile.write(f"<html>\n<img src='data:image/png;base64,{data}'/>\n</html>".encode("ascii"))
+        # return f"<img src='data:image/png;base64,{data}'/>"
+
+    def get_test_proc(self):
+        print(f"GET request test from {self.client_address}")
+        self._set_response()
+        with open(".\\www\\sample-chartist-js.html", 'rb') as html_file:
+            self.wfile.write(html_file.read())
+
+    get_workers = {"/": get_empty_proc, "/logs": get_logs_proc, "/graph": get_graph_proc, "/test": get_test_proc}
+
     def log_message(self, format, *args):
         return
 
@@ -24,62 +93,9 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path == "/logs":
-            print(f"GET request logs from {self.client_address}")
-            self._set_response()
-            with open(LOG_FILE_NAME, 'r') as log_file:
-                output = io.BytesIO()
-                for line in log_file.readlines():
-                    output.write(bytes(line+"<br>", 'utf-8'))
-                output.seek(0)
-                self.wfile.write(output.read())
-        elif self.path == "/graph":
-            print(f"GET request graph from {self.client_address}")
-
-            fig = Figure(figsize=(16, 8), dpi=80, facecolor='w', edgecolor='k')
-            dummy = plt.figure()
-            new_manager = dummy.canvas.manager
-            new_manager.canvas.figure = fig
-            fig.set_canvas(new_manager.canvas)
-
-            #subplots = fig.subplots(1, len(self.data_frames))
-            #fig, axs = fig.subplots(len(self.data_frames.keys()))
-            dfl = len(self.data_frames.keys())
-            if dfl == 0:
-                ax = fig.subplots()
-                ax.plot([0], [0])
-            elif dfl == 1:
-                dfk = list(self.data_frames.keys())[0]
-                axs = fig.subplots()
-                axs.plot(self.data_frames[dfk]['x'], self.data_frames[dfk]['y'])
-                axs.set_title(dfk)
-            else:
-                f, axs = fig.subplots(dfl)
-                for i, df in enumerate(self.data_frames.keys()):
-                    axs[i].plot(self.data_frames[df]['x'], self.data_frames[df]['y'])
-                    axs[i].set_title(df)
-            # for i, df in enumerate(self.data_frames):
-            #     #ax = fig.add_subplot(len(self.data_frames), 1, i)
-            #     ax = fig.add_subplot()
-            #     ax.plot(self.data_frames[df]['x'], self.data_frames[df]['y'])
-            #     ax.set_title(df)
-
-            plt.close(fig)
-
-            # Save it to a temporary buffer.
-            buf = io.BytesIO()
-            fig.savefig(buf, format="png")
-            # with open("result.png", 'wb') as output:
-            #     fig.savefig(output, format="png")
-            # Embed the result in the html output.
-            data = base64.b64encode(buf.getbuffer()).decode("ascii")
-
-            self._set_response()
-            self.wfile.write(f"<html>\n<img src='data:image/png;base64,{data}'/>\n</html>".encode("ascii"))
-            #return f"<img src='data:image/png;base64,{data}'/>"
-        else:
-            self._set_response()
-            self.wfile.write(f"<html>\n<center><h1><a href='http://10.13.1.4:9999/logs'>Logs</a>   <a href='http://10.13.1.4:9999/graph'>Graph</a></h1></center></html>".encode("ascii"))
+        process_func = self.get_workers.get(self.path, None)
+        if process_func is not None:
+            process_func(self)
 
     def do_POST(self):
         content_length = int(self.headers['Content-Length'])
