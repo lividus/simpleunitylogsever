@@ -12,9 +12,30 @@ import numpy as np
 LOG_FILE_NAME = 'server_logs.txt'
 
 
+def route(rule, **options):
+    """A decorator that is used to define custom routes for methods in
+    FlaskView subclasses. The format is exactly the same as Flask's
+    `@app.route` decorator.
+    """
+
+    def decorator(f):
+        # Put the rule cache on the method itself instead of globally
+        if not hasattr(f, '_rule_cache') or f._rule_cache is None:
+            f._rule_cache = {f.__name__: [(rule, options)]}
+        elif not f.__name__ in f._rule_cache:
+            f._rule_cache[f.__name__] = [(rule, options)]
+        else:
+            f._rule_cache[f.__name__].append((rule, options))
+
+        return f
+
+    return decorator
+
+
 class RequestHandler(BaseHTTPRequestHandler):
     data_frames = {}
 
+    @route("get", path="/")
     def get_empty_proc(self):
         self._set_response()
         self.wfile.write(
