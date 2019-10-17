@@ -12,6 +12,31 @@ import numpy as np
 LOG_FILE_NAME = 'server_logs.txt'
 
 
+def set_class_attr(cls, attrname, value):
+    if not hasattr(cls, attrname):
+        setattr(cls, attrname, value)
+
+
+def class_decorator(cls):
+    setattr(cls, '_get_rule_cache', {})
+    setattr(cls, '_post_rule_cache', {})
+    setattr(cls, '_post_rule_cache', {})
+    for name, method in cls.__dict__.items():
+        if hasattr(method, "_rule_cache"):
+            atr = getattr(method, "_rule_cache")
+            rules = atr[name]
+            for rule in rules:
+                path = rule[1]['path']
+                if rule[0] is 'get':
+                    cls._get_rule_cache[path] = method
+                elif rule[0] is 'post':
+                    cls._post_rule_cache[path] = method
+                elif rule[0] is 'put':
+                    cls._put_rule_cache[path] = method
+
+    return cls
+
+
 def route(rule, **options):
     """A decorator that is used to define custom routes for methods in
     FlaskView subclasses. The format is exactly the same as Flask's
@@ -32,9 +57,9 @@ def route(rule, **options):
     return decorator
 
 
-class RequestHandler(BaseHTTPRequestHandler):
-    data_frames = {}
 
+@class_decorator
+class RequestHandler(BaseHTTPRequestHandler):
     @route("get", path="/")
     def get_empty_proc(self):
         self._set_response()
@@ -42,6 +67,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             f"<html>\n<center><h1><a href='http://10.13.1.4:9999/logs'>Logs</a>   <a href='http://10.13.1.4:9999/graph'>Graph</a></h1></center></html>".encode(
                 "ascii"))
 
+    @route("get", path="/logs")
     def get_logs_proc(self):
         print(f"GET request logs from {self.client_address}")
         self._set_response()
@@ -52,6 +78,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             output.seek(0)
             self.wfile.write(output.read())
 
+    @route("get", path="/graph")
     def get_graph_proc(self):
         print(f"GET request graph from {self.client_address}")
 
@@ -97,28 +124,15 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(f"<html>\n<img src='data:image/png;base64,{data}'/>\n</html>".encode("ascii"))
         # return f"<img src='data:image/png;base64,{data}'/>"
 
+    @route("get", path="/test")
     def get_test_proc(self):
         print(f"GET request test from {self.client_address}")
         self._set_response()
         with open(".\\www\\sample-chartist-js.html", 'rb') as html_file:
             self.wfile.write(html_file.read())
 
-    get_workers = {"/": get_empty_proc, "/logs": get_logs_proc, "/graph": get_graph_proc, "/test": get_test_proc}
-
-    def log_message(self, format, *args):
-        return
-
-    def _set_response(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
-
-    def do_GET(self):
-        process_func = self.get_workers.get(self.path, None)
-        if process_func is not None:
-            process_func(self)
-
-    def do_POST(self):
+    @route("post", path="/")
+    def post_empty_proc(self):
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length)
         self.process_post_data(self.client_address, post_data.decode('utf-8'))
@@ -152,6 +166,24 @@ class RequestHandler(BaseHTTPRequestHandler):
                     self.data_frames[dataname]['y'] = fvalue
             else:
                 self.data_frames[dataname] = {'x': ftime, 'y': fvalue}
+
+    def log_message(self, format, *args):
+        return
+
+    def _set_response(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+
+    def do_GET(self):
+        process_func = self._get_rule_cache.get(self.path, None)
+        if process_func is not None:
+            process_func(self)
+
+    def do_POST(self):
+        process_func = self._post_rule_cache.get(self.path, None)
+        if process_func is not None:
+            process_func(self)
 
 
 def setup_logging():
