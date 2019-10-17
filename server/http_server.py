@@ -3,7 +3,8 @@ import io
 import base64
 import socket
 import json
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import HTTPServer
+from RequestHandler import HTTPRequestHandler, request, route
 import logging
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
@@ -12,54 +13,8 @@ import numpy as np
 LOG_FILE_NAME = 'server_logs.txt'
 
 
-def set_class_attr(cls, attrname, value):
-    if not hasattr(cls, attrname):
-        setattr(cls, attrname, value)
-
-
-def class_decorator(cls):
-    setattr(cls, '_get_rule_cache', {})
-    setattr(cls, '_post_rule_cache', {})
-    setattr(cls, '_post_rule_cache', {})
-    for name, method in cls.__dict__.items():
-        if hasattr(method, "_rule_cache"):
-            atr = getattr(method, "_rule_cache")
-            rules = atr[name]
-            for rule in rules:
-                path = rule[1]['path']
-                if rule[0] is 'get':
-                    cls._get_rule_cache[path] = method
-                elif rule[0] is 'post':
-                    cls._post_rule_cache[path] = method
-                elif rule[0] is 'put':
-                    cls._put_rule_cache[path] = method
-
-    return cls
-
-
-def route(rule, **options):
-    """A decorator that is used to define custom routes for methods in
-    FlaskView subclasses. The format is exactly the same as Flask's
-    `@app.route` decorator.
-    """
-
-    def decorator(f):
-        # Put the rule cache on the method itself instead of globally
-        if not hasattr(f, '_rule_cache') or f._rule_cache is None:
-            f._rule_cache = {f.__name__: [(rule, options)]}
-        elif not f.__name__ in f._rule_cache:
-            f._rule_cache[f.__name__] = [(rule, options)]
-        else:
-            f._rule_cache[f.__name__].append((rule, options))
-
-        return f
-
-    return decorator
-
-
-
-@class_decorator
-class RequestHandler(BaseHTTPRequestHandler):
+@request
+class RequestHandler(HTTPRequestHandler):
     @route("get", path="/")
     def get_empty_proc(self):
         self._set_response()
@@ -166,24 +121,6 @@ class RequestHandler(BaseHTTPRequestHandler):
                     self.data_frames[dataname]['y'] = fvalue
             else:
                 self.data_frames[dataname] = {'x': ftime, 'y': fvalue}
-
-    def log_message(self, format, *args):
-        return
-
-    def _set_response(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
-
-    def do_GET(self):
-        process_func = self._get_rule_cache.get(self.path, None)
-        if process_func is not None:
-            process_func(self)
-
-    def do_POST(self):
-        process_func = self._post_rule_cache.get(self.path, None)
-        if process_func is not None:
-            process_func(self)
 
 
 def setup_logging():
