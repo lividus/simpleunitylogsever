@@ -54,12 +54,27 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', 'text/html')
         self.end_headers()
 
+    def _set_json_response(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json;charset=UTF-8')
+        self.end_headers()
+
+    def _set_400_response(self):
+        self.send_response(400)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        self.wfile.write("400 error. Wrong path: '{}'".format(self.path).encode('utf-8'))
+
     def do_GET(self):
         process_func = self._get_rule_cache.get(self.path, None)
         if process_func is not None:
             process_func(self)
+        else:
+            self._set_400_response()
 
     def do_POST(self):
         process_func = self._post_rule_cache.get(self.path, None)
         if process_func is not None:
             process_func(self)
+        else:
+            self._set_400_response()

@@ -8,10 +8,11 @@ from RequestHandler import HTTPRequestHandler, request, route
 import logging
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
+from DataFramesStorage import DataFrames
 import numpy as np
 
 LOG_FILE_NAME = 'server_logs.txt'
-
+data_frames=DataFrames()
 
 @request
 class RequestHandler(HTTPRequestHandler):
@@ -45,38 +46,46 @@ class RequestHandler(HTTPRequestHandler):
 
         # subplots = fig.subplots(1, len(self.data_frames))
         # fig, axs = fig.subplots(len(self.data_frames.keys()))
-        dfl = len(self.data_frames.keys())
-        if dfl == 0:
-            ax = fig.subplots()
-            ax.plot([0], [0])
-        elif dfl == 1:
-            dfk = list(self.data_frames.keys())[0]
-            axs = fig.subplots()
-            axs.plot(self.data_frames[dfk]['x'], self.data_frames[dfk]['y'])
-            axs.set_title(dfk)
-        else:
-            f, axs = fig.subplots(dfl)
-            for i, df in enumerate(self.data_frames.keys()):
-                axs[i].plot(self.data_frames[df]['x'], self.data_frames[df]['y'])
-                axs[i].set_title(df)
-        # for i, df in enumerate(self.data_frames):
-        #     #ax = fig.add_subplot(len(self.data_frames), 1, i)
-        #     ax = fig.add_subplot()
-        #     ax.plot(self.data_frames[df]['x'], self.data_frames[df]['y'])
-        #     ax.set_title(df)
+        #result = f"<html>\n"
+        devices = data_frames.get
+        for device_name in devices:
+            #result += f"<center>{device_name}</center><br>"
+            graphs = devices[device_name]
+            dfl = len(graphs.keys())
+            if dfl == 0:
+                ax = fig.subplots()
+                ax.plot([0], [0])
+            elif dfl == 1:
+                dfk = list(graphs.keys())[0]
+                axs = fig.subplots()
+                axs.plot(graphs[dfk]['times'], graphs[dfk]['values'])
+                axs.set_title(dfk)
+            else:
+                f, axs = fig.subplots(dfl)
+                for i, df in enumerate(graphs.keys()):
+                    axs[i].plot(graphs[df]['times'], graphs[df]['values'])
+                    axs[i].set_title(df)
+            # for i, df in enumerate(self.data_frames):
+            #     #ax = fig.add_subplot(len(self.data_frames), 1, i)
+            #     ax = fig.add_subplot()
+            #     ax.plot(self.data_frames[df]['x'], self.data_frames[df]['y'])
+            #     ax.set_title(df)
 
-        plt.close(fig)
+            plt.close(fig)
 
-        # Save it to a temporary buffer.
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png")
-        # with open("result.png", 'wb') as output:
-        #     fig.savefig(output, format="png")
-        # Embed the result in the html output.
-        data = base64.b64encode(buf.getbuffer()).decode("ascii")
+            # Save it to a temporary buffer.
+            buf = io.BytesIO()
+            fig.savefig(buf, format="png")
+            # with open("result.png", 'wb') as output:
+            #     fig.savefig(output, format="png")
+            # Embed the result in the html output.
+            data = base64.b64encode(buf.getbuffer()).decode("ascii")
 
         self._set_response()
-        self.wfile.write(f"<html>\n<img src='data:image/png;base64,{data}'/>\n</html>".encode("ascii"))
+        try:
+            self.wfile.write(f"<html>\n<img src='data:image/png;base64,{data}'/>\n</html>".encode("ascii"))
+        except Exception as e:
+            print(e)
         # return f"<img src='data:image/png;base64,{data}'/>"
 
     @route("get", path="/test")
@@ -86,42 +95,69 @@ class RequestHandler(HTTPRequestHandler):
         with open(".\\www\\sample-chartist-js.html", 'rb') as html_file:
             self.wfile.write(html_file.read())
 
-    @route("post", path="/")
-    def post_empty_proc(self):
-        content_length = int(self.headers['Content-Length'])
-        post_data = self.rfile.read(content_length)
-        self.process_post_data(self.client_address, post_data.decode('utf-8'))
-        self._set_response()
-        self.wfile.write("POST request for {}".format(self.path).encode('utf-8'))
+    @route("get", path="/dataframes")
+    def get_dataframes_proc(self):
+        #print(f"GET request test from {self.client_address}")
+        self._set_json_response()
+        self.wfile.write(json.dumps(data_frames.get_json).encode("utf-8"))
 
-    def process_post_data(self, address, data):
-        # logging.info(f"{address} {data}")
+    @route("post", path="/dataframe")
+    def post_dataframe(self):
+        if self.process_post_dataframe():
+            self._set_response()
+            self.wfile.write("POST request for {}".format(self.path).encode('utf-8'))
+        else:
+            self._set_400_response()
+
+    @route("post", path="/logs")
+    def post_logs(self):
+        if self.process_post_logs():
+            self._set_response()
+            self.wfile.write("POST request for {}".format(self.path).encode('utf-8'))
+        else:
+            self._set_400_response()
+
+    def process_post_log(self):
+        content_length = int(self.headers['Content-Length'])
+        data = self.rfile.read(content_length).decode('utf-8')
+
         try:
             obj = json.loads(data, encoding='utf8')
         except json.decoder.JSONDecodeError:
-            logging.info(f"{address} {data}")
-            return
+            logging.info(f"{self.client_address} {data}")
+            return False
 
         if obj['MsgType'] == 'log':
             device = obj['DeviceName']
             log_msg = obj['data']
-            logging.info(f"{address} {device} {log_msg}")
-        elif obj['MsgType'] == 'dataframe':
-            dataname = obj['dataname']
-            ftime = obj['time']
-            fvalue = obj['value']
-            if dataname in self.data_frames:
-                x1 = self.data_frames[dataname]['x'][-1]
-                x2 = ftime[0]
-                if x1 < x2:
-                    self.data_frames[dataname]['x'].extend(ftime)
-                    self.data_frames[dataname]['y'].extend(fvalue)
-                else:
-                    self.data_frames[dataname]['x'] = ftime
-                    self.data_frames[dataname]['y'] = fvalue
-            else:
-                self.data_frames[dataname] = {'x': ftime, 'y': fvalue}
+            logging.info(f"{self.client_address} {device} {log_msg}")
+            return True
 
+        return False
+
+    def process_post_dataframe(self):
+        content_length = int(self.headers['Content-Length'])
+        data = self.rfile.read(content_length).decode('utf-8')
+
+        try:
+            obj = json.loads(data, encoding='utf8')
+        except json.decoder.JSONDecodeError:
+            logging.info(f"Data error {self.client_address} {data}")
+            return False
+
+        try:
+            if obj['MsgType'] == 'dataframe':
+                devicename = obj['DeviceName']
+                dataname = obj['DataName']
+                ftime = obj['Time']
+                fvalue = obj['Value']
+                data_frames.append(devicename, dataname, ftime, fvalue)
+                return True
+        except:
+            logging.info(f"Data error {self.client_address} {data}")
+            return False
+
+        return False
 
 def setup_logging():
     logging.basicConfig(filename=LOG_FILE_NAME, level=logging.INFO, format="[%(asctime)s] %(message)s")
