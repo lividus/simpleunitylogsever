@@ -1,4 +1,5 @@
-﻿using System;
+﻿#if DEVELOPMENT_BUILD || UNITY_EDITOR
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Net;
@@ -11,6 +12,25 @@ using UnityEngine.Networking;
 
 public class NetworkClientBehaviourScript : MonoBehaviour
 {
+    private static NetworkClientBehaviourScript _instance = null;
+
+    public static NetworkClientBehaviourScript Instance
+    {
+        get
+        {
+            if (_instance == null)
+            {
+                var obj = new GameObject("NetworkClientBehaviourScript");
+                DontDestroyOnLoad(obj);
+                _instance = obj.AddComponent<NetworkClientBehaviourScript>();
+            }
+
+            return _instance;
+        }
+    }
+
+    public bool m_SendFPS = false;
+
     //private NetworkClientThread nct = null;
 
     [Serializable]
@@ -26,28 +46,28 @@ public class NetworkClientBehaviourScript : MonoBehaviour
         public MsgLog(string deviceName, string data)
         {
             MsgType = "log";
-            this.data = data;
+            this.Data = data;
             this.DeviceName = deviceName;
         }
 
-        [SerializeField] public string data;
+        [SerializeField] public string Data;
     }
 
     [Serializable]
     class MsgDataFrame : Msg
     {
-        public MsgDataFrame(string deviceName, string dataname, float frametime, float framevalue)
+        public MsgDataFrame(string deviceName, string dataname, float[] frametime, float[] framevalue)
         {
             this.MsgType = "dataframe";
             this.DeviceName = deviceName;
-            this.dataname = dataname;
-            this.time = frametime;
-            this.value = framevalue;
+            this.DataName = dataname;
+            this.Time = frametime;
+            this.Value = framevalue;
         }
 
-        [SerializeField] public string dataname;
-        [SerializeField] public float time;
-        [SerializeField] public float value;
+        [SerializeField] public string DataName;
+        [SerializeField] public float[] Time;
+        [SerializeField] public float[] Value;
     }
 
     public string HostName = null;
@@ -67,6 +87,16 @@ public class NetworkClientBehaviourScript : MonoBehaviour
         //nct.Start();
     }
 
+    public void SendGraphData(string dataname, float[] x, float[] y)
+    {
+        StartCoroutine(Post(GetServerURL() + "graph", DataFrameMsgToJson("countur", x, y)));
+    }
+
+    public void ClearGraphData()
+    {
+        StartCoroutine(Get(GetServerURL() + "test2?clear=yes", ""));
+    }
+
     public void LogCallback(string condition, string stackTrace, LogType type)
     {
         //nct.SendLog(condition);
@@ -83,7 +113,7 @@ public class NetworkClientBehaviourScript : MonoBehaviour
         return JsonUtility.ToJson(new MsgLog(DeviceName, data));
     }
 
-    public string DataFrameMsgToJson(string dataname, float x, float y)
+    public string DataFrameMsgToJson(string dataname, float[] x, float[] y)
     {
         return JsonUtility.ToJson(new MsgDataFrame(DeviceName, dataname, x, y));
     }
@@ -107,7 +137,7 @@ public class NetworkClientBehaviourScript : MonoBehaviour
     {
         IPHostEntry ipHost = Dns.GetHostEntry(HostName);
         IPAddress ipAddr = GetIPV4(ipHost);        
-        return string.Format("http://{0}:{1}", ipAddr, Port);
+        return string.Format("http://{0}:{1}/", ipAddr, Port);
     }
 
     IEnumerator Post(string url, string bodyJsonString)
@@ -123,23 +153,53 @@ public class NetworkClientBehaviourScript : MonoBehaviour
         //Debug.Log("Status Code: " + request.responseCode);
     }
 
+    IEnumerator Get(string url, string bodyJsonString)
+    {
+        var request = new UnityWebRequest(url, "GET");
+        byte[] bodyRaw = Encoding.UTF8.GetBytes(bodyJsonString);
+        if (bodyRaw.Length > 0)
+        {
+            request.uploadHandler = (UploadHandler) new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = (DownloadHandler) new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+        }
+
+        yield return request.SendWebRequest();
+
+        //Debug.Log("Status Code: " + request.responseCode);
+    }
+
     int m_Frames = 0;
     float m_FPSTime = 0.0f;
     float m_FPS = 0.0f;
+    private List<float> fpsTimes = new List<float>();
+    private List<float> fpsValues = new List<float>();
 
     void Update()
     {
-        m_Frames++;
-        m_FPSTime += Time.deltaTime;
-        const float calcTime = 1.0f;
-        if (m_FPSTime > calcTime)
+        if (m_SendFPS)
         {
-            m_FPS = m_Frames;
-            m_FPS /= m_FPSTime;
+            m_Frames++;
+            m_FPSTime += Time.deltaTime;
+            const float calcTime = 1.0f;
+            if (m_FPSTime > calcTime)
+            {
+                m_FPS = m_Frames;
+                m_FPS /= m_FPSTime;
 
-            m_FPSTime = 0.0f;
-            m_Frames = 0;
-            StartCoroutine(Post(GetServerURL(), DataFrameMsgToJson("fps", Time.time, m_FPS)));
+                m_FPSTime = 0.0f;
+                m_Frames = 0;
+                fpsTimes.Add(Time.time);
+                fpsValues.Add(m_FPS);
+            }
+
+            if (fpsTimes.Count >= 1)
+            {
+                StartCoroutine(Post(GetServerURL() + "dataframe",
+                    DataFrameMsgToJson("fps", fpsTimes.ToArray(), fpsValues.ToArray())));
+                fpsTimes.Clear();
+                fpsValues.Clear();
+            }
         }
     }
 
@@ -150,3 +210,4 @@ public class NetworkClientBehaviourScript : MonoBehaviour
         Debug.Log(string.Format("[{0,-11}]", int.MaxValue));
     }
 }
+#endif
