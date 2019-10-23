@@ -124,6 +124,11 @@ class RequestHandler(HTTPRequestHandler):
         ax.grid(True, alpha=0.3)
         #show_points(ax, points9)
         dfs = graph_data.get
+        # dfs = {"lividus":{"set1":{"times":[1,2,2,1],
+        #                           "values":[1,1,2,2]},
+        #                   "set2":{"times":[-1,-2,-2,-1],
+        #                           "values":[-1,-1,-2,-2]}
+        #                   }}
         print(dfs)
         print(type(dfs))
         for device_name in dfs:
@@ -133,11 +138,11 @@ class RequestHandler(HTTPRequestHandler):
                 print(type(d))
                 #ax.plot(d['times'], d['values'], color='black', linewidth=0.5)
                 x = d['times']
-                if x[0] != x[-1]:
-                    x.append(x[0])
                 y = d['values']
-                if y[0] != y[-1]:
+                if x[0] != x[-1] or y[0] != y[-1]:
+                    x.append(x[0])
                     y.append(y[0])
+
                 for i in range(0, len(x)-1):
                     plt.plot((x[i], x[i+1]), (y[i], y[i+1]))
                 #ax.plot(d['times'].append(d['times'][0]), d['values'].append(d['values'][0]), linewidth=0.5)
@@ -232,7 +237,8 @@ def setup_logging():
 
 def run(server_class=HTTPServer, handler_class=RequestHandler, port=9999):
     host = socket.gethostname()
-    server_address = ("10.13.1.4", port)
+    #server_address = ("10.13.1.4", port)
+    server_address = (host, port)
     httpd = server_class(server_address, handler_class)
     print(f'Starting http server under: {server_address}')
     try:

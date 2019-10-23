@@ -89,7 +89,7 @@ public class NetworkClientBehaviourScript : MonoBehaviour
 
     public void SendGraphData(string dataname, float[] x, float[] y)
     {
-        StartCoroutine(Post(GetServerURL() + "graph", DataFrameMsgToJson("countur", x, y)));
+        StartCoroutine(Post(GetServerURL() + "graph", DataFrameMsgToJson(dataname, x, y)));
     }
 
     public void ClearGraphData()
