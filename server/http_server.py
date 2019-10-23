@@ -9,10 +9,25 @@ import logging
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from DataFramesStorage import DataFrames
-import numpy as np
+import mpld3
+
 
 LOG_FILE_NAME = 'server_logs.txt'
-data_frames=DataFrames()
+data_frames = DataFrames()
+graph_data = DataFrames()
+
+points9 = [(-217, -132.58), (-140, -302.58), (-302, -141.58), (-325, -21.57999), (-317, 27.42001), (-341, 153.42), (-316, 204.42), (-264, 251.42), (-243, 205.42), (-219, 138.42), (-196, 123.42), (-199, 23.42001), (-244, -64.58002)]
+def show_points(ax, points):
+    for index in range(0, len(points)):
+        p1i = index
+        if p1i >= len(points):
+            p1i = 0
+        p2i = index + 1
+        if p2i >= len(points):
+            p2i = 0
+        p1 = points[p1i]
+        p2 = points[p2i]
+        ax.plot((p1[0], p2[0]), (p1[1], p2[1]), color='black', linewidth=0.5)
 
 @request
 class RequestHandler(HTTPRequestHandler):
@@ -95,6 +110,41 @@ class RequestHandler(HTTPRequestHandler):
         with open(".\\www\\sample-chartist-js.html", 'rb') as html_file:
             self.wfile.write(html_file.read())
 
+    @route("get", path="/test2")
+    def get_test2_proc(self):
+        print(f"GET request test from {self.client_address}")
+        #print(self.request_parameters)
+        self._set_response()
+        if(self.request_parameters.get("clear", None)):
+            graph_data.clear()
+            return
+        fig, ax = plt.subplots()
+        fig.set_size_inches(8, 8)
+        fig.set_dpi(100)
+        ax.grid(True, alpha=0.3)
+        #show_points(ax, points9)
+        dfs = graph_data.get
+        print(dfs)
+        print(type(dfs))
+        for device_name in dfs:
+            device = dfs[device_name]
+            for gd in device:
+                d = device[gd]
+                print(type(d))
+                #ax.plot(d['times'], d['values'], color='black', linewidth=0.5)
+                x = d['times']
+                if x[0] != x[-1]:
+                    x.append(x[0])
+                y = d['values']
+                if y[0] != y[-1]:
+                    y.append(y[0])
+                for i in range(0, len(x)-1):
+                    plt.plot((x[i], x[i+1]), (y[i], y[i+1]))
+                #ax.plot(d['times'].append(d['times'][0]), d['values'].append(d['values'][0]), linewidth=0.5)
+        self.wfile.write(f"<center>{mpld3.fig_to_html(fig)}</center>".encode('utf8'))
+        # with open(".\\www\\sample-chartist-js.html", 'rb') as html_file:
+        #     self.wfile.write(html_file.read())
+
     @route("get", path="/dataframes")
     def get_dataframes_proc(self):
         #print(f"GET request test from {self.client_address}")
@@ -103,7 +153,7 @@ class RequestHandler(HTTPRequestHandler):
 
     @route("post", path="/dataframe")
     def post_dataframe(self):
-        if self.process_post_dataframe():
+        if self.process_post_dataframe(data_frames):
             self._set_response()
             self.wfile.write("POST request for {}".format(self.path).encode('utf-8'))
         else:
@@ -112,6 +162,14 @@ class RequestHandler(HTTPRequestHandler):
     @route("post", path="/logs")
     def post_logs(self):
         if self.process_post_logs():
+            self._set_response()
+            self.wfile.write("POST request for {}".format(self.path).encode('utf-8'))
+        else:
+            self._set_400_response()
+
+    @route("post", path="/graph")
+    def post_logs(self):
+        if self.process_post_dataframe(graph_data, replace=True):
             self._set_response()
             self.wfile.write("POST request for {}".format(self.path).encode('utf-8'))
         else:
@@ -135,7 +193,7 @@ class RequestHandler(HTTPRequestHandler):
 
         return False
 
-    def process_post_dataframe(self):
+    def process_post_dataframe(self, container, replace=False):
         content_length = int(self.headers['Content-Length'])
         data = self.rfile.read(content_length).decode('utf-8')
 
@@ -151,7 +209,11 @@ class RequestHandler(HTTPRequestHandler):
                 dataname = obj['DataName']
                 ftime = obj['Time']
                 fvalue = obj['Value']
-                data_frames.append(devicename, dataname, ftime, fvalue)
+                if replace:
+                    container.fill(devicename, dataname, ftime, fvalue)
+                else:
+                    container.append(devicename, dataname, ftime, fvalue)
+
                 return True
         except:
             logging.info(f"Data error {self.client_address} {data}")

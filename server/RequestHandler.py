@@ -1,4 +1,5 @@
 from http.server import BaseHTTPRequestHandler
+from urllib import parse
 
 def set_class_attr(cls, attrname, value):
     if not hasattr(cls, attrname):
@@ -65,15 +66,29 @@ class HTTPRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write("400 error. Wrong path: '{}'".format(self.path).encode('utf-8'))
 
+    def get_clear_path(self):
+        result = self.path
+        self.request_parameters = {}
+        if result == '/':
+            return result
+        qpos = result.find('?')
+        if qpos >= 0:
+            params = result[qpos+1:]
+            result = result[:qpos]
+            self.request_parameters = parse.parse_qs(params)
+        if result[-1] == "/":
+            result = result[:-1]
+        return result
+
     def do_GET(self):
-        process_func = self._get_rule_cache.get(self.path, None)
+        process_func = self._get_rule_cache.get(self.get_clear_path(), None)
         if process_func is not None:
             process_func(self)
         else:
             self._set_400_response()
 
     def do_POST(self):
-        process_func = self._post_rule_cache.get(self.path, None)
+        process_func = self._post_rule_cache.get(self.get_clear_path(), None)
         if process_func is not None:
             process_func(self)
         else:

@@ -18,6 +18,14 @@ class DataFrames:
         self.MaxDataframes = max_dataframes_count
         self.data_frames = {}
 
+    def fill(self, device_name, data_name, times, values):
+        df = self.data_frames.get(device_name, None)
+        if df is not None:
+            dn = df.get(data_name, None)
+            if dn is not None:
+                dn = {'times': [], 'values': []}
+        self.append(device_name, data_name, times, values)
+
     def append(self, device_name, data_name, times, values):
         device = self.data_frames.get(device_name, None)
         if device is None:
@@ -37,6 +45,9 @@ class DataFrames:
                 count = frl - self.MaxDataframes
                 data['times'] = data['times'][count:]
                 data['values'] = data['values'][count:]
+
+    def clear(self):
+        self.data_frames = {}
 
     @property
     def get(self):
